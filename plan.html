@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>grafana-cli — Implementation Plan (v0.1.0 shipped)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f2e;
+    --border: #2d3548;
+    --accent: #ff8833;
+    --accent2: #5eb3ff;
+    --text: #e6e6e6;
+    --muted: #8b9bb4;
+    --code-bg: #0a0d14;
+    --ok: #7ee787;
+    --warn: #f0c674;
+    --bad:  #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 2rem;
+    line-height: 1.6;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
+  }
+  h1 { color: var(--accent); margin: 0; font-size: 2.2rem; }
+  h2 {
+    color: var(--accent2);
+    border-left: 4px solid var(--accent2);
+    padding-left: 0.75rem;
+    margin-top: 2.5rem;
+  }
+  h3 { color: var(--text); margin-top: 1.5rem; }
+  .subtitle { color: var(--muted); font-size: 1.05rem; margin-top: 0.5rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.7em;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+  .badge-shipped { background: #1f4a2a; color: var(--ok); }
+  .badge-planned { background: #4a3a10; color: var(--warn); }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+  pre, code {
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+  }
+  pre {
+    padding: 1rem;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  code { padding: 0.1em 0.4em; color: var(--accent); }
+  pre code { padding: 0; color: var(--text); background: transparent; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { padding: 0.55rem 0.7rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--accent2); font-weight: 600; }
+  td.ok  { color: var(--ok); }
+  td.warn { color: var(--warn); }
+  ul.checklist { list-style: none; padding-left: 0; }
+  ul.checklist li::before { content: "✅ "; color: var(--ok); margin-right: 0.3rem; }
+  ul.checklist li.todo::before { content: "☐ "; color: var(--muted); }
+  .phase-num {
+    display: inline-block;
+    width: 2rem; height: 2rem;
+    line-height: 2rem; text-align: center;
+    background: var(--ok); color: var(--bg);
+    border-radius: 50%; font-weight: 700;
+    margin-right: 0.5rem;
+  }
+  .phase-num.todo { background: var(--warn); }
+  a { color: var(--accent2); }
+  .ascii {
+    white-space: pre;
+    font-family: "SF Mono", Monaco, monospace;
+    background: var(--code-bg);
+    padding: 0.6rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    overflow-x: auto;
+    line-height: 1.1;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>🦀 grafana-cli <span class="badge badge-shipped">v0.1.0 shipped</span></h1>
+  <p class="subtitle">A Rust CLI for the Grafana HTTP API — list/search dashboards, render panel charts inline, and emit reproducible PromQL scripts. Authenticated with a service-account token from <code>--token</code>, <code>GRAFANA_SERVICE_ACCOUNT_TOKEN</code>, or a config file.</p>
+</header>
+
+<h2>1. Status Summary</h2>
+<div class="panel">
+  <p>The CLI is built, tested, and verified against a Grafana endpoint. All planned v0.1.0 functionality plus several follow-up enhancements landed. Unit tests cover token precedence; live integration is verified manually.</p>
+  <div class="grid">
+    <div class="panel"><strong>Source</strong><br/>~5 KLOC Rust, 13 modules across <code>client/</code>, <code>commands/</code>, <code>render/</code>.</div>
+    <div class="panel"><strong>Build</strong><br/><code>cargo build --release</code> — clean, no warnings.</div>
+    <div class="panel"><strong>Tests</strong><br/><code>cargo test</code> — 4 passed (token-precedence + redact).</div>
+    <div class="panel"><strong>Skill</strong><br/><code>~/.copilot/skills/grafana-cli/SKILL.md</code> installed for agent use.</div>
+  </div>
+</div>
+
+<h2>2. Architecture (as built)</h2>
+<pre><code>grafana-cli/
+├── Cargo.toml, README.md, plan.html
+├── skills/grafana-cli/SKILL.md          # Anthropic-format skill for Copilot CLI
+└── src/
+    ├── main.rs                          # tokio entrypoint, URL cache fallback, dispatch
+    ├── cli.rs                           # clap subcommand defs
+    ├── config.rs                        # ConfigFile/Profile/ResolvedConfig + unit tests
+    ├── auth.rs                          # bearer + X-Grafana-Org-Id headers
+    ├── error.rs                         # GrafanaError (thiserror)
+    ├── client/
+    │   ├── mod.rs                       # GrafanaClient: health, search, folders,
+    │   │                                #   datasources, get_dashboard, ds_query_prometheus
+    │   └── models.rs                    # SearchHit, Folder, Datasource, …
+    ├── commands/
+    │   ├── cache.rs                     # ConfigMap TOML save/load
+    │   ├── init.rs                      # bootstrap + persist URL into config.toml
+    │   ├── config_cmd.rs                # config show / config path
+    │   ├── dashboards.rs                # list / find / show / view
+    │   ├── generate.rs                  # metric / chart / dashboard
+    │   └── panel.rs                     # shared: extract_panels, parse_panel,
+    │                                    #   build_var_map, expand_vars, resolve_ds_uid
+    └── render/
+        ├── chart.rs                     # extract_series + custom ASCII renderer
+        └── shell.rs                     # curl/promtool/logcli emitters
+</code></pre>
+
+<h2>3. Command Surface</h2>
+<table>
+  <thead><tr><th>Command</th><th>Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>init [--force] [--shallow] [--no-datasources] [--concurrency N]</code></td><td class="ok">shipped</td><td>Pings <code>/api/health</code>, fetches folders+search+datasources, optionally per-dashboard details (bounded concurrency via FuturesUnordered). Persists <code>url</code> into <code>config.toml</code> automatically.</td></tr>
+    <tr><td><code>config show</code> / <code>config path</code></td><td class="ok">shipped</td><td>Prints resolved profile / URL / redacted token / token source; cache file path.</td></tr>
+    <tr><td><code>dashboards list [--folder F] [--exclude-folder F …] [--refresh]</code></td><td class="ok">shipped</td><td>Cache-first; <code>--refresh</code> hits live API. <code>--exclude-folder</code> is repeatable, case-insensitive substring.</td></tr>
+    <tr><td><code>dashboards find QUERY [--exclude-folder F …] [--refresh]</code></td><td class="ok">shipped</td><td>Substring match on title / tag / UID.</td></tr>
+    <tr><td><code>dashboards show UID</code></td><td class="ok">shipped</td><td>Metadata + per-panel summary table.</td></tr>
+    <tr><td><code>dashboards view UID [--range S] [--step S] [--filter SUB] [--skip N] [--limit N]</code></td><td class="ok">shipped</td><td>Browser-like view: renders every Prometheus panel inline as an ASCII chart with min/mean/max bands.</td></tr>
+    <tr><td><code>generate metric UID --panel N</code></td><td class="ok">shipped</td><td>Prints raw + var-expanded PromQL with datasource header.</td></tr>
+    <tr><td><code>generate chart  UID --panel N [--range S] [--step S]</code></td><td class="ok">shipped</td><td>Calls <code>/api/ds/query</code>, renders ASCII chart.</td></tr>
+    <tr><td><code>generate dashboard UID</code></td><td class="ok">shipped</td><td>Emits a runnable bash script with curl/logcli per panel.</td></tr>
+    <tr><td><code>query '&lt;promql&gt;' [--ds UID] [--range S]</code></td><td class="warn">planned</td><td>Ad-hoc PromQL → JSON / chart. Today: shell out to <code>curl</code> against the datasource proxy.</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Auth &amp; URL Resolution</h2>
+<div class="panel">
+  <p>Implemented in <code>config.rs::resolve()</code> and <code>main.rs::dispatch()</code>. Precedence (first match wins):</p>
+  <h3>Token</h3>
+  <ol><li><code>--token &lt;TOKEN&gt;</code></li><li><code>GRAFANA_SERVICE_ACCOUNT_TOKEN</code> env</li><li><code>profiles.&lt;name&gt;.token</code> in config file</li></ol>
+  <h3>URL</h3>
+  <ol><li><code>--url &lt;URL&gt;</code></li><li><code>profiles.&lt;name&gt;.url</code></li><li><code>grafana_url</code> from cache map written by previous <code>init</code> <em>(fallback)</em></li></ol>
+  <p><code>init</code> writes <code>url</code> and <code>default_profile</code> into <code>~/.config/grafana-cli/config.toml</code> so future shells need only the env-var token. The token itself is never persisted.</p>
+</div>
+
+<h2>5. Init Flow (config-map bootstrap)</h2>
+<div class="panel">
+  <ol>
+    <li><code>GET /api/health</code> — print version + DB status</li>
+    <li><code>GET /api/folders</code> — slugify titles, build folder map</li>
+    <li><code>GET /api/search?type=dash-db&amp;limit=5000&amp;page=N</code> — paginate until empty</li>
+    <li><code>GET /api/datasources</code> (unless <code>--no-datasources</code>)</li>
+    <li>For each dashboard (unless <code>--shallow</code>): <code>GET /api/dashboards/uid/{uid}</code> in parallel (default 8, configurable), count panels, collect referenced datasource UIDs</li>
+    <li>Sort dashboards by title, serialize to <code>~/.config/grafana-cli/cache/&lt;profile&gt;.toml</code></li>
+    <li>Update <code>config.toml</code> with the URL (and <code>default_profile</code> if unset)</li>
+  </ol>
+  <p>Typical bootstrap time on a real instance with a few hundred dashboards: ~10–15 s end-to-end.</p>
+</div>
+
+<h2>6. Chart Rendering (the rabbit hole)</h2>
+<div class="panel">
+  <p>Originally planned with <code>textplots</code>. After it produced a blank canvas for our data, we discovered two problems:</p>
+  <ul>
+    <li><strong>Display quirk</strong> — <code>Chart::to_string()</code> only renders axis labels; the canvas pixels are only filled when <code>display()</code> (which calls <code>axis()</code>+<code>figures()</code>) runs.</li>
+    <li><strong>Lifetime trap</strong> — <code>Chart::lineplot(&amp;'a mut self, &amp;'a Shape)</code> ties the chart's mutable borrow to the shape's lifetime, so you can't call <code>axis()</code>/<code>figures()</code> on a chart bound to a local variable.</li>
+  </ul>
+  <p>We replaced it with a small hand-rolled 100×24 grid renderer in <code>render::chart::render_ascii</code>. Multi-series Prometheus responses are aggregated <strong>per timestamp</strong> into min/mean/max bands, so a 135-broker CPU panel reveals spread instead of crisscross noise:</p>
+<pre class="ascii">     99.82 │▴   ▴  ▴   ▴                                  ▴   ▴      ▴             ▴  ▴   ▴
+           ││   │  │   │                                  │   │  ▴   │  ▴          │  │   │
+           ││   │  │   │  ▴   ▴  ▴   ▴  ▴   ▴  ▴   ▴  ▴   │   │  │   │  │   ▴  ▴   │  │   │
+           ││   │  │   │  │   │  │   │  │   │  │   │  │   │   │  │   │  │   │  │   │  │   │
+           │●───●──●───●──●───●──●───●──●───●──●───●──●───●───●──●───●──●───●──●───●──●───●
+           ││   │  │   │  │   │  │   │  │   │  │   │  │   │   │  │   │  │   │  │   │  │   │
+      0.12 │▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾  ▾   ▾
+            ─────────────────────────────────────────────────────────────────────────────────
+            16:06:24                                                              17:06:08
+y:[0.12, 99.82]   raw=182404   timestamps=29   max series/ts=7550   ▴=max ●=mean ▾=min</pre>
+</div>
+
+<h2>7. Template-Variable Resolution</h2>
+<div class="panel">
+  <p>Implemented in <code>commands/panel.rs</code>:</p>
+  <ul>
+    <li><code>build_var_map(dash)</code> — walks <code>templating.list[].current.value</code>; flattens single-element arrays; converts Grafana's magic <code>"$__all"</code> to the variable's <code>allValue</code> (or <code>.*</code> as a safe regex fallback).</li>
+    <li><code>expand_vars(s, vars)</code> — substitutes <code>$name</code>, <code>${name}</code>, and <code>${name:format}</code> references, leaving unknown vars untouched.</li>
+    <li><code>resolve_ds_uid(raw, vars, cache_map)</code> — handles <code>$datasource</code> / <code>${DS_PROMETHEUS}</code> references, then falls back to the first <code>prometheus</code> datasource in the cache.</li>
+  </ul>
+  <p>This was added after the first <code>generate chart</code> attempt returned <code>"Data source not found"</code> and the second returned a query with literal <code>$instance=$__all</code> in it.</p>
+</div>
+
+<h2>8. Delivery Phases (all complete)</h2>
+
+<div class="panel">
+  <h3><span class="phase-num">1</span>Foundation <span class="badge badge-shipped">shipped</span></h3>
+  <ul class="checklist">
+    <li>Cargo init, deps wired, CI-style commands (<code>cargo fmt/clippy/test</code>) green</li>
+    <li><code>config.rs</code> + <code>auth.rs</code> with env/file/flag precedence + unit tests</li>
+    <li><code>GrafanaClient</code> with auth header injection</li>
+    <li><code>config show</code> end-to-end smoke test</li>
+    <li><code>init</code> command — health → folders → search → details → cache → URL persist</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h3><span class="phase-num">2</span>Read APIs <span class="badge badge-shipped">shipped</span></h3>
+  <ul class="checklist">
+    <li>Serde models for search/folder/datasource/dashboard payloads</li>
+    <li><code>dashboards list / find / show</code> against live API + cache</li>
+    <li>Table (comfy-table) + JSON output renderers</li>
+    <li><code>--exclude-folder</code> repeatable filter (added on-demand)</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h3><span class="phase-num">3</span>Generate <span class="badge badge-shipped">shipped</span></h3>
+  <ul class="checklist">
+    <li>Panel walker + template-variable resolver (incl. <code>$__all</code>)</li>
+    <li><code>generate metric</code> — raw + expanded PromQL output</li>
+    <li><code>generate dashboard</code> — bash reproduction script (curl/logcli)</li>
+    <li><code>generate chart</code> — <code>/api/ds/query</code> → custom ASCII renderer</li>
+    <li><code>dashboards view</code> — render every panel inline (browser-style)</li>
+    <li>Min/mean/max chart aggregation for multi-series queries</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h3><span class="phase-num">4</span>Polish &amp; Docs <span class="badge badge-shipped">shipped</span></h3>
+  <ul class="checklist">
+    <li>README with install/configure/common-usage</li>
+    <li>Anthropic-format skill at <code>skills/grafana-cli/SKILL.md</code>, symlinked into <code>~/.copilot/skills/</code></li>
+    <li>plan.html (this document) kept in sync with implementation</li>
+    <li>Zero compiler warnings under <code>cargo build</code></li>
+  </ul>
+</div>
+
+<h2>9. Lessons Learned (Pitfalls Hit)</h2>
+<div class="panel">
+  <ol>
+    <li><strong>textplots</strong> Display+lifetime quirks — replaced with a hand-rolled grid renderer.</li>
+    <li>Grafana stores <strong><code>"$__all"</code></strong> literally in <code>current.value</code> — substitute via <code>allValue</code> or <code>.*</code>.</li>
+    <li>Panel <code>datasource.uid</code> is often a template variable (e.g. <code>${DS_PROMETHEUS}</code>) — always run through <code>resolve_ds_uid</code>.</li>
+    <li><strong>macOS config path</strong> resolves to <code>~/Library/Application Support/grafana-cli/</code>, not <code>~/.config/...</code>. Docs say XDG-style for portability.</li>
+    <li><code>init</code> persists <code>url</code> into the config file but <strong>never the token</strong> — keep secrets in env/keychain.</li>
+    <li><code>/api/search</code> caps at 5000 results/page; paginate with <code>page=N</code> until empty.</li>
+    <li>When passing <code>Shape::Lines(&amp;data)</code> inline, bind it to a <code>let</code> first — the temporary dies at the semicolon.</li>
+    <li>Drawing one polyline per series for 100+ series produces visual noise that hides the line. <strong>Always aggregate.</strong></li>
+    <li><code>FuturesUnordered</code> with seed+refill gives predictable progress output (<code>25/347, 50/347, …</code>); <code>buffer_unordered</code> reorders.</li>
+    <li>Non-Prometheus panels print a <code>skip:</code> line and continue — never abort the whole <code>dashboards view</code>.</li>
+  </ol>
+</div>
+
+<h2>10. Roadmap (post-v0.1.0)</h2>
+<table>
+  <thead><tr><th>Item</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>grafana-cli query '&lt;promql&gt;' --ds UID [--range S] [--json]</code></td><td>Today an agent has to shell out to <code>curl</code> against the datasource proxy. A first-class subcommand reusing <code>client.ds_query_prometheus</code> is ~20 lines.</td></tr>
+    <tr><td>Loki support in <code>generate chart</code> / <code>view</code></td><td>Currently logs print <code>skip:</code>. Need a separate frame extractor for LogQL responses.</td></tr>
+    <tr><td>Per-series labeling in chart output (top-N)</td><td>Useful for "which broker is the outlier?" — show the label of the max / min series alongside the band.</td></tr>
+    <tr><td>Live <code>--watch</code> mode</td><td>Tail-style refresh for <code>dashboards view</code> at <code>--interval</code> seconds.</td></tr>
+    <tr><td>Multi-value template variables</td><td>Currently we take the first element of array <code>current.value</code>. Real handling needs Grafana's CSV/regex/pipe formats (<code>${var:csv}</code> etc.).</td></tr>
+    <tr><td>Shell completions + man page</td><td><code>clap_complete</code> + <code>clap_mangen</code> — straightforward.</td></tr>
+    <tr><td>Homebrew tap + GitHub release pipeline</td><td>Cross-compile static binaries for macOS/Linux on tag push.</td></tr>
+  </tbody>
+</table>
+
+<h2>11. Definition of Done — v0.1.0 ✓</h2>
+<div class="panel">
+  <ul class="checklist">
+    <li>Single binary builds clean for <code>aarch64-apple-darwin</code></li>
+    <li>Token read from CLI flag, env, or config — verified by unit tests</li>
+    <li><code>init</code> against live Grafana writes a usable cache + persists URL</li>
+    <li><code>dashboards list / find / show / view</code> verified against a Grafana endpoint</li>
+    <li><code>generate metric / chart / dashboard</code> work for Prometheus panels including template-variable expansion</li>
+    <li>README documents install, configure, and the primary commands</li>
+    <li>Skill installed at <code>~/.copilot/skills/grafana-cli/SKILL.md</code></li>
+    <li><code>cargo build</code> green with zero warnings</li>
+  </ul>
+</div>
+
+<footer style="margin-top:3rem; padding-top:1rem; border-top:1px solid var(--border); color:var(--muted); font-size:0.85rem;">
+  grafana-cli plan · v0.1.0 shipped 2026-06-03 · Rust edition
+</footer>
+
+</div>
+</body>
+</html>
