@@ -7,8 +7,7 @@ pub fn auth_headers(token: &str, org_id: Option<i64>) -> Result<HeaderMap> {
     if trimmed.is_empty() {
         return Err(GrafanaError::MissingToken);
     }
-    let mut bearer =
-        HeaderValue::from_str(&format!("Bearer {trimmed}")).map_err(invalid_token)?;
+    let mut bearer = HeaderValue::from_str(&format!("Bearer {trimmed}")).map_err(invalid_token)?;
     bearer.set_sensitive(true);
     h.insert(AUTHORIZATION, bearer);
     if let Some(org) = org_id {

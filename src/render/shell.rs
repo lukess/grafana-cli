@@ -8,7 +8,10 @@ pub fn curl_prometheus_instant(prom_url: &str, expr: &str) -> String {
 
 #[allow(dead_code)]
 pub fn promtool_instant(expr: &str) -> String {
-    format!("promtool query instant http://localhost:9090 '{}'", shell_escape(expr))
+    format!(
+        "promtool query instant http://localhost:9090 '{}'",
+        shell_escape(expr)
+    )
 }
 
 pub fn logcli_query(expr: &str) -> String {

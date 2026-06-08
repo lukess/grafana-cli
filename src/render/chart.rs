@@ -68,10 +68,13 @@ pub fn render_ascii(series: &[(f32, f32)], width: usize, height: usize) -> Strin
     let series_count = pts.len(); // ts count
     let max_per_ts = series
         .iter()
-        .fold(std::collections::BTreeMap::<i64, u32>::new(), |mut m, (x, _)| {
-            *m.entry(x.round() as i64).or_insert(0) += 1;
-            m
-        })
+        .fold(
+            std::collections::BTreeMap::<i64, u32>::new(),
+            |mut m, (x, _)| {
+                *m.entry(x.round() as i64).or_insert(0) += 1;
+                m
+            },
+        )
         .values()
         .copied()
         .max()

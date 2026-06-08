@@ -4,7 +4,9 @@ use thiserror::Error;
 pub enum GrafanaError {
     #[error("missing Grafana URL (set in config or pass --url)")]
     MissingUrl,
-    #[error("missing service-account token (set GRAFANA_SERVICE_ACCOUNT_TOKEN, --token, or config)")]
+    #[error(
+        "missing service-account token (set GRAFANA_SERVICE_ACCOUNT_TOKEN, --token, or config)"
+    )]
     MissingToken,
     #[error("token contains characters invalid for an HTTP header (check for stray newlines)")]
     InvalidToken,

@@ -17,7 +17,10 @@ pub fn run(cfg: &ResolvedConfig, action: &ConfigAction) -> Result<()> {
             if let Some(org) = cfg.org_id {
                 println!("  org_id       : {org}");
             }
-            println!("  cache path   : {}", cache_path(&cfg.profile_name).display());
+            println!(
+                "  cache path   : {}",
+                cache_path(&cfg.profile_name).display()
+            );
         }
         ConfigAction::Path => {
             println!("{}", cache_path(&cfg.profile_name).display());

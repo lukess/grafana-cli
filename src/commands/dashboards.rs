@@ -1,7 +1,9 @@
 use crate::cli::{DashboardAction, OutputFormat};
 use crate::client::GrafanaClient;
 use crate::commands::cache;
-use crate::commands::panel::{build_var_map, expand_vars, extract_panels, parse_panel, resolve_ds_uid};
+use crate::commands::panel::{
+    build_var_map, expand_vars, extract_panels, parse_panel, resolve_ds_uid,
+};
 use crate::config::ResolvedConfig;
 use crate::error::Result;
 use crate::render::chart;
@@ -177,8 +179,13 @@ async fn show(cfg: &ResolvedConfig, uid: &str, output: OutputFormat) -> Result<(
                 println!("Tags:      {tags}");
             }
             let mut t = Table::new();
-            t.load_preset(UTF8_FULL)
-                .set_header(vec!["ID", "TITLE", "TYPE", "DATASOURCE", "TARGETS"]);
+            t.load_preset(UTF8_FULL).set_header(vec![
+                "ID",
+                "TITLE",
+                "TYPE",
+                "DATASOURCE",
+                "TARGETS",
+            ]);
             if let Some(panels) = dash.get("panels").and_then(|v| v.as_array()) {
                 for p in panels {
                     let id = p.get("id").and_then(|v| v.as_i64()).unwrap_or(-1);
@@ -240,9 +247,12 @@ async fn view(
         .iter()
         .map(|p| parse_panel(p))
         .filter(|info| !info.targets.is_empty())
-        .filter(|info| filter.is_none() || filter
-            .map(|f| info.title.to_lowercase().contains(&f.to_lowercase()))
-            .unwrap_or(true))
+        .filter(|info| {
+            filter.is_none()
+                || filter
+                    .map(|f| info.title.to_lowercase().contains(&f.to_lowercase()))
+                    .unwrap_or(true)
+        })
         .collect();
     let total = renderable.len();
     let end = limit.map(|n| skip + n).unwrap_or(total).min(total);
@@ -278,13 +288,19 @@ async fn view(
             .or_else(|| info.ds_type.clone())
             .unwrap_or_else(|| "prometheus".to_string());
         if ds_kind != "prometheus" {
-            println!("  {} datasource type '{ds_kind}' not supported", "skip:".red());
+            println!(
+                "  {} datasource type '{ds_kind}' not supported",
+                "skip:".red()
+            );
             continue;
         }
         let expr = expand_vars(&info.targets[0].expr, &vars);
         println!("  {} {}", "expr:".dimmed(), expr);
 
-        match client.ds_query_prometheus(&ds_uid, &expr, range, step).await {
+        match client
+            .ds_query_prometheus(&ds_uid, &expr, range, step)
+            .await
+        {
             Ok(resp) => {
                 let series = chart::extract_series(&resp);
                 println!("{}", chart::render_ascii(&series, 100, 16));
@@ -295,10 +311,6 @@ async fn view(
         }
     }
     println!("\n{}", bar.cyan());
-    println!(
-        "  Rendered {}/{} panels",
-        slice.len(),
-        total
-    );
+    println!("  Rendered {}/{} panels", slice.len(), total);
     Ok(())
 }

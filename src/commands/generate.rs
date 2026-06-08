@@ -1,7 +1,9 @@
 use crate::cli::GenerateAction;
 use crate::client::GrafanaClient;
 use crate::commands::cache;
-use crate::commands::panel::{build_var_map, expand_vars, extract_panels, parse_panel, resolve_ds_uid};
+use crate::commands::panel::{
+    build_var_map, expand_vars, extract_panels, parse_panel, resolve_ds_uid,
+};
 use crate::config::ResolvedConfig;
 use crate::error::{GrafanaError, Result};
 use crate::render::{chart, shell};
@@ -10,9 +12,12 @@ use owo_colors::OwoColorize;
 pub async fn run(cfg: &ResolvedConfig, action: &GenerateAction) -> Result<()> {
     match action {
         GenerateAction::Metric { uid, panel } => metric(cfg, uid, *panel).await,
-        GenerateAction::Chart { uid, panel, range, step } => {
-            chart_cmd(cfg, uid, *panel, *range, *step).await
-        }
+        GenerateAction::Chart {
+            uid,
+            panel,
+            range,
+            step,
+        } => chart_cmd(cfg, uid, *panel, *range, *step).await,
         GenerateAction::Dashboard { uid } => dashboard(cfg, uid).await,
     }
 }
@@ -69,8 +74,9 @@ async fn chart_cmd(
         .clone()
         .or_else(|| info.targets.iter().find_map(|t| t.ds_uid.clone()))
         .unwrap_or_else(|| "$datasource".to_string());
-    let ds_uid = resolve_ds_uid(&raw_ds, &vars, cache_map.as_ref())
-        .ok_or_else(|| GrafanaError::UnsupportedDatasource(format!("cannot resolve datasource '{raw_ds}'")))?;
+    let ds_uid = resolve_ds_uid(&raw_ds, &vars, cache_map.as_ref()).ok_or_else(|| {
+        GrafanaError::UnsupportedDatasource(format!("cannot resolve datasource '{raw_ds}'"))
+    })?;
 
     let ds_kind = cache_map
         .as_ref()
@@ -102,7 +108,9 @@ async fn chart_cmd(
     }
     println!("  range: {range}s, step: {step}s");
 
-    let resp = client.ds_query_prometheus(&ds_uid, &expr, range, step).await?;
+    let resp = client
+        .ds_query_prometheus(&ds_uid, &expr, range, step)
+        .await?;
     let series = chart::extract_series(&resp);
     println!("\n{}", chart::render_ascii(&series, 100, 24));
     Ok(())

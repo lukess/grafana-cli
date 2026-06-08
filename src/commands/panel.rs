@@ -153,11 +153,7 @@ pub fn expand_vars(s: &str, vars: &HashMap<String, String>) -> String {
             }
         }
         // Fallback: copy one valid UTF-8 char without re-encoding raw bytes.
-        let ch_len = s[i..]
-            .chars()
-            .next()
-            .map(|c| c.len_utf8())
-            .unwrap_or(1);
+        let ch_len = s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
         out.push_str(&s[i..i + ch_len]);
         i += ch_len;
         let _ = b;

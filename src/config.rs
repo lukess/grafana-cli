@@ -83,7 +83,11 @@ pub fn resolve(
         .or_else(|| file.default_profile.clone())
         .unwrap_or_else(|| "default".to_string());
 
-    let profile = file.profiles.get(&profile_name).cloned().unwrap_or_default();
+    let profile = file
+        .profiles
+        .get(&profile_name)
+        .cloned()
+        .unwrap_or_default();
 
     let url = url_override
         .map(String::from)
