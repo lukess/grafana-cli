@@ -109,6 +109,7 @@ pub fn render_ascii(series: &[(f32, f32)], width: usize, height: usize) -> Strin
         let r_hi = y_to_row(*hi);
         let r_lo = y_to_row(*lo);
         let (a, b) = (r_hi.min(r_lo), r_hi.max(r_lo));
+        #[allow(clippy::needless_range_loop)]
         for r in a..=b {
             if grid[r][cx] == ' ' {
                 grid[r][cx] = '│';

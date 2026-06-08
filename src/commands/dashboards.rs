@@ -240,7 +240,7 @@ async fn view(
         .iter()
         .map(|p| parse_panel(p))
         .filter(|info| !info.targets.is_empty())
-        .filter(|info| matches!(filter, None) || filter
+        .filter(|info| filter.is_none() || filter
             .map(|f| info.title.to_lowercase().contains(&f.to_lowercase()))
             .unwrap_or(true))
         .collect();

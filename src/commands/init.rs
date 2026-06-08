@@ -115,7 +115,7 @@ pub async fn run(cfg: &ResolvedConfig, args: &InitArgs) -> Result<()> {
         let total = hits.len();
         while let Some(joined) = tasks.next().await {
             done += 1;
-            if done % 25 == 0 || done == total {
+            if done.is_multiple_of(25) || done == total {
                 eprint!("\r  {done}/{total}");
             }
             // refill
