@@ -132,7 +132,7 @@ fn render(entries: &[cache::DashboardEntry], output: OutputFormat) -> Result<()>
         }
         OutputFormat::Table => {
             let mut t = Table::new();
-            t.load_preset(UTF8_FULL)
+            t.load_style(UTF8_FULL)
                 .set_content_arrangement(ContentArrangement::Dynamic)
                 .set_header(vec!["UID", "TITLE", "FOLDER", "PANELS", "TAGS"]);
             for d in entries {
@@ -179,7 +179,7 @@ async fn show(cfg: &ResolvedConfig, uid: &str, output: OutputFormat) -> Result<(
                 println!("Tags:      {tags}");
             }
             let mut t = Table::new();
-            t.load_preset(UTF8_FULL).set_header(vec![
+            t.load_style(UTF8_FULL).set_header(vec![
                 "ID",
                 "TITLE",
                 "TYPE",
